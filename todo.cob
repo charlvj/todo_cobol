@@ -4,7 +4,7 @@
        environment division.
        input-output section.
        file-control.
-           select tasks-file assign to "tasks.data"
+           select tasks-file assign to tasks-file-name
                  organization is indexed
                  access mode is random
                  record key is task-id
@@ -24,6 +24,8 @@
        copy cmdparser-vars.
 
        78 task-count-max value 9999.
+       01 data-dir pic X(50).
+       01 tasks-file-name pic X(50).
        01 tasks-file-status  pic X(02) value zero.
        01 show-task-id pic 9999 value zero.
        01 next-task-id pic 9999 value zero.
@@ -38,6 +40,8 @@
       * Main program elements
       * ------------------------------------------------------------------
        procedure division.
+
+            perform setFilename.
 
            accept cmd from command-line.
            if cmd = spaces then
@@ -98,6 +102,17 @@
            display "exit  -  Quit        "
            .
 
+
+       setFilename.
+            accept data-dir from environment "HOME".
+           string data-dir delimited by spaces
+                  "/.todo_cobol" delimited by size
+                  into data-dir.
+            call 'CBL_CREATE_DIR' using data-dir.
+            string data-dir delimited by spaces
+                  "/tasks.data"
+                  into tasks-file-name.
+            display "Home: " tasks-file-name.
 
        ensureFileExists.
            open input tasks-file.
