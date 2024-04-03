@@ -2,23 +2,48 @@
        program-id. todo.
 
        environment division.
+       configuration section.
+       repository.
+            function isStatusOneOf
+            function all intrinsic.
+
        input-output section.
        file-control.
            select tasks-file assign to tasks-file-name
-                 organization is indexed
-                 access mode is random
-                 record key is task-id
-                 alternate record key is task-status with duplicates
-                 file status is tasks-file-status.
+                  organization is indexed
+                  access mode is random
+                  record key is task-id
+                  alternate record key is task-status with duplicates
+                  file status is tasks-file-status.
+
+           select task-notes-file assign to task-notes-file-name
+                  organization is indexed
+                  access mode is random
+                  record key is task-note-id
+                  alternate record key is task-note-task-id 
+                  with duplicates
+                  file status is task-notes-file-status.
+
 
 
        data division.
        file section.
        fd tasks-file.
        01 task-rec.
-              05 task-id pic 99999.
-              05 task-status pic X.
-              05 task-description pic X(79).
+          05 task-id pic 99999.
+          05 task-status pic X.
+          05 task-description pic X(79).
+          05 task-created-at pic 9(8).
+          05 task-started-at pic 9(8).
+          05 task-completed-at pic 9(8).
+
+       fd task-notes-file.
+       01 task-note-rec.
+          05 task-note-id pic 999999.
+          05 task-note-task-id pic 99999.
+          05 task-note-text pic X(200).
+          05 task-note-created-at pic 9(8).
+
 
        working-storage section.
        copy cmdparser-vars.
@@ -27,27 +52,38 @@
        01 data-dir pic X(50).
        01 tasks-file-name pic X(50).
        01 tasks-file-status  pic X(02) value zero.
+       01 task-notes-file-status pic X(02) value zero.
        01 show-task-id pic 9999 value zero.
        01 next-task-id pic 9999 value zero.
+       01 next-task-note-id pic 99999 value zero.
        01 new-task-status pic X.
        01 file-status pic 9.
-             88 eof  value 1.
-             88 not-eof value 0.
+          88 eof  value 1.
+          88 not-eof value 0.
        01 exit-program pic X value 'N'.
+       01 task-statuses-to-list pic X(5) value 'NP'.
 
+       01 temp-date.
+          05 temp-date-year pic 9(4).
+          05 temp-date-month pic 9(2).
+          05 temp-date-day pic 9(2).
+          05 temp-date-hour pic 9(2).
+          05 temp-date-minute pic 9(2).
+          05 temp-date-second pic 9(2).
+          05 temp-date-milliseconds pic 9(2).
 
       * ------------------------------------------------------------------
       * Main program elements
       * ------------------------------------------------------------------
        procedure division.
 
-            perform setFilename.
+           perform setFilename.
 
            accept cmd from command-line.
            if cmd = spaces then
-                 perform mainLoop
+              perform mainLoop
            else
-                 perform singleLoop
+              perform singleLoop
            end-if.
 
            stop run.
@@ -55,11 +91,11 @@
        mainLoop.
            perform ensureFileExists.
            perform until exit-program = 'Y'
-                  perform resetCmdVars
-                  display "> " with no advancing
-                  accept cmd
+              perform resetCmdVars
+              display "> " with no advancing
+              accept cmd
 
-                  perform performCommand
+              perform performCommand
            end-perform.
 
        singleLoop.
@@ -69,91 +105,129 @@
            perform parseCmd.
            perform nextCmdToken.
            evaluate cmd-tok-current
-                 when = "list"
-                       display "All tasks..."
-                       perform showTasks
-                 when = "add"
-                       display "Adding a task"
-                       perform addTask
-                 when = "show"
-                       perform showTask
-                 when = "help"
-                       perform showHelp
-                 when = "start"
-                       perform startTask
-                 when = "complete"
-                       perform completeTask
-                 when = "delete"
-                       perform deleteTask
-                 when = "exit" or = 'quit' or = 'q'
-                       display "Quitting"
-                       move 'Y' to exit-program
-                 when other
-                       display "Invalid Command. Use help for more."
+           when = "list"
+              display "All tasks..."
+              perform showTasks
+           when = "add"
+              display "Adding a task"
+              perform addTask
+           when = "show"
+              perform showTask
+           when = "addnote"
+              perform addNote
+           when = "help"
+              perform showHelp
+           when = "start"
+              perform startTask
+           when = "complete"
+              perform completeTask
+           when = "delete"
+              perform deleteTask
+           when = "exit" or = 'quit' or = 'q'
+              display "Quitting"
+              move 'Y' to exit-program
+           when other
+              display "Invalid Command. Use help for more."
            end-evaluate.
  
 
        showHelp.
-           display "----------------"
-           display "list  -  Show tasks  "
-           display "add   -  Add task    "
-           display "show  -  Show Task   "
-           display "help  -  Show this help"
-           display "exit  -  Quit        "
-           .
+           display "Available Commands:"
+           display " list     -  Show tasks      ".
+           display " add      -  Add task        ".
+           display " show     -  Show Task       ".
+           display " addnote  -  Add a task note ".
+           display " start    -  Start a task    ".
+           display " complete -  Complete a task ".
+           display " delete   -  Delete a task   ".
+           display " help     -  Show this help  ".
+           display " quit     -  Quit            ".
 
 
        setFilename.
-            accept data-dir from environment "HOME".
+           accept data-dir from environment "HOME".
            string data-dir delimited by spaces
                   "/.todo_cobol" delimited by size
                   into data-dir.
-            call 'CBL_CREATE_DIR' using data-dir.
-            string data-dir delimited by spaces
+           call 'CBL_CREATE_DIR' using data-dir.
+           string data-dir delimited by spaces
                   "/tasks.data"
                   into tasks-file-name.
-            display "Home: " tasks-file-name.
+           string data-dir delimited by spaces
+                  "/task-notes.data"
+                  into task-notes-file-name.
 
        ensureFileExists.
            open input tasks-file.
            if tasks-file-status = '35' then
-                 open output tasks-file
+              open output tasks-file
            end-if.
            close tasks-file.
+           open input task-notes-file.
+           if task-notes-file-status = '35' then
+              open output  task-notes-file
+           end-if.
+           close task-notes-file.
 
 
       * ---------------------------------------------------------
       * Task maitenance routines
       * ---------------------------------------------------------
        showTasks.
+            if not cmd-no-more-toks then
+                  perform nextCmdToken
+                  if cmd-tok-current = 'all' then
+                        move 'NPC' to task-statuses-to-list
+                  else
+                        move 'NP' to task-statuses-to-list
+                  end-if
+            end-if.
+
            perform displayTaskRowHeader.
            open input tasks-file.
            set not-eof to true.
            read tasks-file next record.
            perform until tasks-file-status = '10'
-                 if task-status = 'N' or task-status = 'P' then
-                       perform displayTaskRow
-                 end-if
-                 read tasks-file next record 
+              if isStatusOneOf(task-status, task-statuses-to-list) = 'Y'
+                 perform displayTaskRow
+              end-if
+              read tasks-file next record 
            end-perform.
            close tasks-file.
 
        showTask.
            perform nextCmdToken.
            if cmd-no-more-toks then
-                 display "Task id to show: " with no advancing
-                 accept show-task-id
+              display "Task id to show: " with no advancing
+              accept show-task-id
            else
-                 move cmd-tok-current to show-task-id
+              move cmd-tok-current to show-task-id
            end-if.
 
            open input tasks-file.
            move show-task-id to task-id.
            read tasks-file key is task-id
-                 invalid key display "Invalid Key: ",
-                 tasks-file-status.
+              invalid key display "Invalid Key: ",
+                         tasks-file-status.
            perform displayTask.
            close tasks-file.
+
+           display " Notes:"
+           open input task-notes-file.
+           read task-notes-file  next record.
+           perform until task-notes-file-status = '10'
+              if task-note-task-id = task-id then
+                 move task-note-created-at to temp-date
+                 display '  [', 
+                         temp-date-year, 
+                         '/', temp-date-month, 
+                         '/', temp-date-day,
+                         '] ', 
+                         function trim(task-note-text)
+              end-if
+              read task-notes-file next record
+           end-perform.
+           close task-notes-file.
 
        addTask.
            perform getNextTaskId.
@@ -161,27 +235,71 @@
            open i-o tasks-file.
            move 'N' to task-status.
            move next-task-id to task-id.
+           move function current-date(1:8) to task-created-at.
            display "New Task: " with no advancing.
            accept task-description.
            write task-rec
-                 invalid key display "Invalid Key: ", tasks-file-status.
+              invalid key display "Invalid Key: ", tasks-file-status.
            close tasks-file.
 
        getNextTaskId.
            if next-task-id = 0 then
-                 open input tasks-file
-                 read tasks-file next record
-                 perform until tasks-file-status = '10'
-                        if task-id > next-task-id then
-                              move task-id to next-task-id
-                        end-if
-                        read tasks-file next record 
-                  end-perform
-                  close tasks-file
+              open input tasks-file
+              read tasks-file next record
+              perform until tasks-file-status = '10'
+                 if task-id > next-task-id then
+                    move task-id to next-task-id
+                 end-if
+                 read tasks-file next record 
+              end-perform
+              close tasks-file
            end-if.
            add 1 to next-task-id.
            
+       addNote.
+           perform nextCmdToken.
+           if cmd-no-more-toks then
+              display "Task id to show: " with no advancing
+              accept show-task-id
+           else
+              move cmd-tok-current to show-task-id
+           end-if.
 
+           open input tasks-file.
+           move show-task-id to task-id.
+           read tasks-file key is task-id
+              invalid key display "Task not found: ", show-task-id.
+           close tasks-file.
+
+           if tasks-file-status = '23' then  *> Invalid Key
+              goback
+           end-if.
+            
+           perform getNextTaskNoteId.
+
+           open i-o task-notes-file.
+           move next-task-note-id to task-note-id.
+           move task-id to task-note-task-id.
+           move function current-date(1:8) to task-note-created-at.
+           display "New Note: " with no advancing.
+           accept task-note-text.
+           write task-note-rec.
+           close task-notes-file.
+
+
+       getNextTaskNoteId.
+           if next-task-note-id = 0 then
+              open input task-notes-file
+              read task-notes-file next record
+              perform until task-notes-file-status = '10'
+                 if task-note-id > next-task-note-id then
+                    move task-note-id to next-task-note-id
+                 end-if
+                 read task-notes-file next record 
+              end-perform
+              close task-notes-file
+           end-if.
+           add 1 to next-task-note-id.
 
        displayTaskRowHeader.
            display "   ID   | Status |  Description".
@@ -190,35 +308,52 @@
        displayTaskRow.
            display "  " task-id 
                    " |    " task-status 
-                   "   |  " task-description
+                   "   |  " function trim(task-description)
            .
 
        displayTask.
            display " ".
-           display " ID: " task-id "   Status: " task-status
-           display " Description: ", task-description
+           display " ID: " task-id "   Status: " task-status.
+           display " Description: ", task-description.
+           move task-created-at to temp-date.
+           display " Created on: ", temp-date-month, "/", 
+                   temp-date-day, "/", temp-date-year.
+           if task-status = 'P' then
+              initialize temp-date
+              move task-started-at to temp-date
+              display " Started on: ", temp-date-month, "/", 
+                      temp-date-day, "/", temp-date-year
+           end-if.
            display " ".
 
        updateTaskStatus.
            display "Starting task".
            add 1 to cmd-current.
            if cmd-current >= cmd-count then
-                 display "Task ID to start: " with no advancing
-                 accept show-task-id
+              display "Task ID to start: " with no advancing
+              accept show-task-id
            else
-                 move cmd-tok(cmd-current) to show-task-id
+              move cmd-tok(cmd-current) to show-task-id
            end-if.
            
            open i-o tasks-file.
            move show-task-id to task-id.
            read tasks-file key is task-id
-                 invalid key 
-                       display "Invalid Key: ", tasks-file-status.
+              invalid key 
+                 display "Invalid Key: ", tasks-file-status.
            if tasks-file-status = '00' then
-                 move new-task-status to task-status
-                 rewrite task-rec end-rewrite
+              move new-task-status to task-status
+              evaluate new-task-status
+              when = 'P'
+                 move function current-date(1:8) 
+                   to task-started-at
+              when = 'C'
+                 move function current-date(1:8)
+                   to task-completed-at
+              end-evaluate
+              rewrite task-rec end-rewrite
            else
-                 display "There was an error loading the record."
+              display "There was an error loading the record."
            end-if.
            close tasks-file.
 
@@ -241,3 +376,37 @@
        copy cmdparser-routines.
 
        end program todo.
+
+
+       identification division.
+       function-id. isStatusOneOf.
+
+       environment division.
+       configuration section.
+       repository.
+            function all intrinsic.
+
+       data division.
+       working-storage section.
+       01 idx pic 99.
+
+       linkage section.
+       01 status-to-check pic X.
+       01 status-list pic X(10).
+       01 found-flag pic X(1) value 'N'.
+
+       procedure division using status-to-check status-list
+                        returning found-flag.
+
+            perform varying idx 
+                  from 1 by 1 
+                  until idx > length of status-list
+                  if status-to-check = status-list(idx:1) then
+                        move 'Y' to found-flag
+                        exit perform
+                  end-if
+            end-perform.
+
+            goback.
+       end function isStatusOneOf.
+
