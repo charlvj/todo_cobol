@@ -46,7 +46,6 @@
 
 
        working-storage section.
-       copy cmdparser-vars.
 
        78 task-count-max value 9999.
        01 data-dir pic X(50).
@@ -72,12 +71,21 @@
           05 temp-date-second pic 9(2).
           05 temp-date-milliseconds pic 9(2).
 
+       01 cmd-data.
+            05 cmd pic X(9999).
+            05 cmd-tok pic X(50).
+            05 cmd-ptr pic 99.
+            05 cmd-flag pic X.
+                  88 cmd-flag-available value 'Y'.
+                  88 cmd-flag-done value 'N'.
+
       * ------------------------------------------------------------------
       * Main program elements
       * ------------------------------------------------------------------
        procedure division.
 
            perform setFilename.
+           perform cmdReset.
 
            accept cmd from command-line.
            if cmd = spaces then
@@ -91,7 +99,7 @@
        mainLoop.
            perform ensureFileExists.
            perform until exit-program = 'Y'
-              perform resetCmdVars
+              perform cmdReset
               display "> " with no advancing
               accept cmd
 
@@ -102,9 +110,8 @@
            perform performCommand.
 
        performCommand.
-           perform parseCmd.
-           perform nextCmdToken.
-           evaluate cmd-tok-current
+           perform cmdGetNextToken.
+           evaluate cmd-tok
            when = "list"
               display "All tasks..."
               perform showTasks
@@ -127,7 +134,7 @@
               display "Quitting"
               move 'Y' to exit-program
            when other
-              display "Invalid Command. Use help for more."
+              display "Invalid Command: " cmd-tok ". Use help for more."
            end-evaluate.
  
 
@@ -173,14 +180,18 @@
       * ---------------------------------------------------------
       * Task maitenance routines
       * ---------------------------------------------------------
+       taskActions section.
+
        showTasks.
-            if not cmd-no-more-toks then
-                  perform nextCmdToken
-                  if cmd-tok-current = 'all' then
+            if cmd-flag-available then
+                  perform cmdGetNextToken
+                  if cmd-tok = 'all' then
                         move 'NPC' to task-statuses-to-list
                   else
                         move 'NP' to task-statuses-to-list
                   end-if
+            else
+                  move 'NP' to task-statuses-to-list
             end-if.
 
            perform displayTaskRowHeader.
@@ -196,12 +207,12 @@
            close tasks-file.
 
        showTask.
-           perform nextCmdToken.
-           if cmd-no-more-toks then
+           if cmd-flag-done then
               display "Task id to show: " with no advancing
               accept show-task-id
            else
-              move cmd-tok-current to show-task-id
+              perform cmdGetNextToken
+              move cmd-tok to show-task-id
            end-if.
 
            open input tasks-file.
@@ -233,11 +244,17 @@
            perform getNextTaskId.
 
            open i-o tasks-file.
+           
            move 'N' to task-status.
            move next-task-id to task-id.
            move function current-date(1:8) to task-created-at.
-           display "New Task: " with no advancing.
-           accept task-description.
+
+           if cmd-flag-available then
+                  move function trim(cmd(cmd-ptr:)) to task-description
+           else
+                  display "New Task: " with no advancing
+                  accept task-description
+           end-if.
            write task-rec
               invalid key display "Invalid Key: ", tasks-file-status.
            close tasks-file.
@@ -257,12 +274,12 @@
            add 1 to next-task-id.
            
        addNote.
-           perform nextCmdToken.
-           if cmd-no-more-toks then
+           if cmd-flag-done then
               display "Task id to show: " with no advancing
               accept show-task-id
            else
-              move cmd-tok-current to show-task-id
+              perform cmdGetNextToken
+              move cmd-tok to show-task-id
            end-if.
 
            open input tasks-file.
@@ -281,8 +298,12 @@
            move next-task-note-id to task-note-id.
            move task-id to task-note-task-id.
            move function current-date(1:8) to task-note-created-at.
-           display "New Note: " with no advancing.
-           accept task-note-text.
+           if cmd-flag-available then
+                  move function trim(cmd(cmd-ptr:)) to task-note-text
+           else
+                  display "New Note: " with no advancing
+                  accept task-note-text
+           end-if
            write task-note-rec.
            close task-notes-file.
 
@@ -328,12 +349,12 @@
 
        updateTaskStatus.
            display "Starting task".
-           add 1 to cmd-current.
-           if cmd-current >= cmd-count then
+           if cmd-flag-done then
               display "Task ID to start: " with no advancing
               accept show-task-id
            else
-              move cmd-tok(cmd-current) to show-task-id
+              perform cmdGetNextToken
+              move cmd-tok to show-task-id
            end-if.
            
            open i-o tasks-file.
@@ -372,8 +393,26 @@
            perform updateTaskStatus.
            display "Task Deleted".
 
+       
+       cmdParsing section.
 
-       copy cmdparser-routines.
+       cmdReset.
+            move spaces to cmd.
+            move 1 to cmd-ptr.
+            move spaces to cmd-tok.
+
+       cmdGetNextToken.
+            move spaces to cmd-tok.
+            unstring cmd delimited by all space
+                  into cmd-tok
+                  with pointer cmd-ptr
+            end-unstring.
+            if cmd-tok = spaces or cmd-ptr = 0
+                  move 'N' to cmd-flag
+            else
+                  move 'Y' to cmd-flag
+            end-if.
+       
 
        end program todo.
 
