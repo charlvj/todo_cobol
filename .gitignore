@@ -1,3 +1,7 @@
 todo
 *.swp
 tasks.data*
+*.so
+bin/*
+_superbol/
+.vscode/*
