@@ -88,9 +88,11 @@ doGetNext.
 
 doGetOne.
     move ws-task-id to task-id.
-    read tasks-file key is task-id.
+    read tasks-file key is task-id
+        invalid key set DA_KEY_INVALID in ws-result to TRUE
+        not invalid key set DA_SUCCESS in ws-result to TRUE
+    end-read.
     move task-rec to ws-task-rec.
-    perform setResult.
 
 doCreate.
     perform getNextTaskId.

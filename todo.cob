@@ -7,6 +7,7 @@ environment division.
 configuration section.
       repository.
             function isStatusOneOf
+            function getErrorMsg
             function all intrinsic.
 
 
@@ -32,6 +33,7 @@ copy cp_task_note_defs replacing ==:prefix:== by ==ws-==.
 01 new-task-status pic X.
 01 exit-program pic X value 'N'.
 01 task-statuses-to-list pic X(5) value 'NP'.
+01 da-result-save pic X(10).
 01 temp-date.
       05 temp-date-year pic 9(4).
       05 temp-date-month pic 9(2).
@@ -173,7 +175,9 @@ taskActions section.
         move show-task-id to ws-task-id.
         move 'getOne' to ws-file-action.
         call 'da_tasks' using ws-da-defs, ws-task-rec.
+        move ws-result to da-result-save.
         perform end_tasks_read.
+        move da-result-save to ws-result.
 
     showTask.
         if cmd-flag-done then
@@ -185,6 +189,10 @@ taskActions section.
         end-if.
 
         perform findTask.
+        if not DA_SUCCESS then 
+            perform handleError
+            exit paragraph
+        end-if.
 
         perform displayTask.
 
@@ -334,17 +342,20 @@ taskActions section.
         perform updateTaskStatus.
         display "Task Deleted".
 
+    handleError.
+        display "There was an error: ", function getErrorMsg(ws-result).
+
 fileHelpers section.
     start_tasks_read.
         initialize ws-da-defs.
-        move '/home/charlvj/.todo_cobol/tasks.data' to ws-file-name.
+        move tasks-file-name to ws-file-name.
         move 'r' to ws-file-mode.
         move 'open' to ws-file-action.
         call 'da_tasks' using ws-da-defs, ws-task-rec.
 
     start_tasks_write.
         initialize ws-da-defs.
-        move '/home/charlvj/.todo_cobol/tasks.data' to ws-file-name.
+        move tasks-file-name to ws-file-name.
         move 'rw' to ws-file-mode.
         move 'open' to ws-file-action.
         call 'da_tasks' using ws-da-defs, ws-task-rec.
@@ -356,7 +367,7 @@ fileHelpers section.
 
     start_task_notes_read.
         initialize ws-da-defs.
-        move '/home/charlvj/.todo_cobol/task-notes.data' to ws-file-name.
+        move task-notes-file-name to ws-file-name.
         move 'r' to ws-file-mode.
         move 'open' to ws-file-action.
         call 'da_comments' using ws-da-defs, ws-task-note-rec.
@@ -425,3 +436,62 @@ procedure division using status-to-check status-list
     goback.
 end function isStatusOneOf.
 
+
+
+identification division.
+function-id. getErrorMsg.
+
+environment division.
+configuration section.
+repository.
+    function all intrinsic.
+
+data division.
+working-storage section.
+01 idx        pic 99.
+
+linkage section.
+01 error-code pic X(10).
+01 error-msg pic X(50).
+
+copy da_defs.
+
+procedure division using error-code
+           returning error-msg.
+
+    initialize error-msg.
+    evaluate error-code
+        when '00' move "Success" to error-msg
+        when '02' move "Success - Duplicate Record" to error-msg
+        when '04' move "Success - Incomplete Write" to error-msg
+        when '05' move "Success - Optional" to error-msg
+        when '07' move "Success - No Unit" to error-msg
+        when '10' move "End of File" to error-msg
+        when '14' move "Out of Key Range" to error-msg
+        when '21' move "Invalid Key" to error-msg
+        when '22' move "Key Already Exists" to error-msg
+        when '23' move "Key Does Not Exist" to error-msg
+        when '30' move "Permanent Error" to error-msg
+        when '31' move "Inconsistent Filename" to error-msg
+        when '34' move "Boundary Violation" to error-msg
+        when '35' move "Does not Exist" to error-msg
+        when '37' move "Permission Denied" to error-msg
+        when '38' move "Closed with Lock" to error-msg
+        when '39' move "Conflict Attribute" to error-msg
+        when '41' move "Already Open" to error-msg
+        when '42' move "Not Open" to error-msg
+        when '43' move "Read not Done" to error-msg
+        when '44' move "Record Overflow" to error-msg
+        when '46' move "Read Error" to error-msg
+        when '47' move "Input Denied" to error-msg
+        when '48' move "Output Denied" to error-msg
+        when '49' move "IO Denied" to error-msg
+        when '51' move "Record Locked" to error-msg
+        when '52' move "End of Page" to error-msg
+        when '57' move "IO Linage" to error-msg
+        when '61' move "File Sharing" to error-msg
+        when '91' move "Not Available" to error-msg
+        when other move "unknown error" to error-msg
+    end-evaluate.
+    goback.
+end function getErrorMsg.
