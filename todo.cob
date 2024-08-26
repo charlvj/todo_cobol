@@ -49,6 +49,9 @@ copy cp_task_note_defs replacing ==:prefix:== by ==ws-==.
       05 cmd-flag pic X.
             88 cmd-flag-available value 'Y'.
             88 cmd-flag-done value 'N'.
+01 stats-totals.
+    05 total-new pic 999.
+    05 total-in-process pic 999.
 
 *> ------------------------------------------------------------------
 *> Main program elements
@@ -101,6 +104,8 @@ performCommand.
         perform completeTask
     when = "delete"
         perform deleteTask
+    when = "stats"
+        perform showStats
     when = "exit" or = 'quit' or = 'q'
         display "Quitting"
         move 'Y' to exit-program
@@ -118,6 +123,7 @@ showHelp.
     display " start    -  Start a task    ".
     display " complete -  Complete a task ".
     display " delete   -  Delete a task   ".
+    display " stats    -  Show number of new and in process".
     display " help     -  Show this help  ".
     display " quit     -  Quit            ".
 
@@ -269,6 +275,29 @@ taskActions section.
         call 'da_comments' using ws-da-defs, ws-task-note-rec.
         perform end_task_notes_read.
 
+
+    showStats.
+        move 0 to total-new.
+        move 0 to total-in-process.
+
+        perform start_tasks_read.
+        initialize ws-da-defs.
+        move 'getAll' to ws-file-action.
+        call 'da_tasks' using ws-file-action, ws-task-rec.
+
+        perform until DA_END_OF_FILE
+            if ws-task-status = 'N' then
+                add 1 to total-new
+            end-if
+            if ws-task-status = 'P' then
+                add 1 to total-in-process
+            end-if
+            move 'getNext' to ws-file-action
+            call 'da_tasks' using ws-file-action, ws-task-rec
+        end-perform.
+        perform end_tasks_read.
+
+        display "New: " total-new "; In Process: " total-in-process.
 
     displayTaskRowHeader.
         display "   ID   | Status |  Description".
