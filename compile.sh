@@ -15,7 +15,7 @@ MODULES=(
 EXECUTABLE="todo"
 FILELIST=""
 for module in ${MODULES[@]}; do
-    OBJ_NAME=${BIN_DIR}/${module}.so
+    OBJ_NAME=${BIN_DIR}/${module}.o
     cobc -I ${COPYBOOKS} -c -o ${OBJ_NAME} ${module}.cob
     FILELIST="$FILELIST $OBJ_NAME"
 done
