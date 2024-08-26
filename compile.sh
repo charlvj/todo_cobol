@@ -13,9 +13,11 @@ MODULES=(
     )
 
 EXECUTABLE="todo"
-
+FILELIST=""
 for module in ${MODULES[@]}; do
-    cobc -I ${COPYBOOKS} -o ${BIN_DIR}/${module}.so ${module}.cob
+    OBJ_NAME=${BIN_DIR}/${module}.so
+    cobc -I ${COPYBOOKS} -c -o ${OBJ_NAME} ${module}.cob
+    FILELIST="$FILELIST $OBJ_NAME"
 done
 
-cobc -I ${COPYBOOKS} -o ${BIN_DIR}/${EXECUTABLE} -x ${EXECUTABLE}.cob
+cobc -I ${COPYBOOKS} -fstatic-call -o ${BIN_DIR}/${EXECUTABLE} -x ${EXECUTABLE}.cob $FILELIST
