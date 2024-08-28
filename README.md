@@ -57,3 +57,17 @@ $
 ```
 
 
+## Changing your bash prompt
+
+You can use the `stats` command to get a short summary of the totals in a specific format. For example:
+
+```
+$ todo stats New=%N,Process=%P
+New=6,Process=3
+```
+
+You can use this in the `PS1` variable to put a short summary in your prompt. I have prefix my prompt with the summary in gray:
+```
+PS1="\[\033[90m \$(todo stats [%N\;%P]) $PS1"
+```
+(At the end of my .bashrc)

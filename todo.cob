@@ -52,6 +52,18 @@ copy cp_task_note_defs replacing ==:prefix:== by ==ws-==.
 01 stats-totals.
     05 total-new pic 999.
     05 total-in-process pic 999.
+01 stats-formatting.
+    05 stats-template pic X(20).
+    05 stats-result pic X(20).
+    05 stats-template-idx pic 99.
+    05 stats-result-idx pic 99.
+    05 stats-template-length pic 99.
+    05 stats-template-current-char pic X(1).
+    05 stats-number-to-copy pic Z(2)9.
+    05 stats-length-to-copy pic 9.
+    05 stats-template-state pic 9.
+        88 TEMPLATE_STATE_COPY value 1.
+        88 TEMPLATE_STATE_INTERPRET value 2.
 
 *> ------------------------------------------------------------------
 *> Main program elements
@@ -277,6 +289,12 @@ taskActions section.
 
 
     showStats.
+        if cmd-flag-available then
+            move function trim(cmd(cmd-ptr:)) to stats-template
+        else
+            move "New: %N; Process: %P" to stats-template
+        end-if.
+
         move 0 to total-new.
         move 0 to total-in-process.
 
@@ -297,7 +315,8 @@ taskActions section.
         end-perform.
         perform end_tasks_read.
 
-        display "New: " total-new "; In Process: " total-in-process.
+        perform parseStatsFormat.
+        display function trim(stats-result).
 
     displayTaskRowHeader.
         display "   ID   | Status |  Description".
@@ -425,6 +444,42 @@ cmdParsing section.
         else
                 move 'Y' to cmd-flag
         end-if.
+
+
+helpers section.
+
+    *> This can probably be made more efficient, but hey, it works!
+    parseStatsFormat.
+        initialize stats-result.
+        move 0 to stats-template-idx.
+        move 1 to stats-result-idx.
+        compute stats-template-length = function length(trim(stats-template)).
+        set TEMPLATE_STATE_COPY to TRUE.
+
+        perform varying stats-template-idx from 1 by 1 until stats-template-idx > stats-template-length
+            move stats-template(stats-template-idx:1) to stats-template-current-char
+            if TEMPLATE_STATE_COPY then
+                if stats-template-current-char = '%' then
+                    set TEMPLATE_STATE_INTERPRET to TRUE
+                else
+                    move stats-template-current-char to stats-result(stats-result-idx:1)
+                    add 1 to stats-result-idx
+                end-if
+            else if TEMPLATE_STATE_INTERPRET then
+                evaluate stats-template-current-char
+                    when 'P'
+                        move total-in-process to stats-number-to-copy
+                    when 'N'
+                        move total-new to stats-number-to-copy
+                    when other 
+                        move 0 to stats-number-to-copy
+                end-evaluate
+                move function length(trim(stats-number-to-copy)) to stats-length-to-copy
+                move function trim(stats-number-to-copy) to stats-result(stats-result-idx:stats-length-to-copy)
+                add stats-length-to-copy to stats-result-idx
+                set TEMPLATE_STATE_COPY to TRUE
+            end-if
+        end-perform.
 
 
 end program todo.
